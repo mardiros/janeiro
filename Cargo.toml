@@ -13,6 +13,5 @@ name = "janeiro"
 log   = "0.3.1"
 env_logger = "0.3.1"
 mio =  { git = "https://github.com/carllerche/mio" }
-bytes = { git = "https://github.com/carllerche/bytes", rev = "7edb577d0a" }
 nix = "0.4.1"
 net2 = "0.2.15"

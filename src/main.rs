@@ -1,59 +1,62 @@
 extern crate mio;
 extern crate nix;
-extern crate bytes;
 
 #[macro_use]
 extern crate log;
 extern crate env_logger;
 
 
+use std::str;
 
 mod janeiro;
 
-use janeiro::{Rio, Transport, ServerFactory, ServerProtocol, Client};
+use janeiro::{Rio, Transport, ServerFactory, Protocol, Reason};
 
 
-struct EchoServerProtocol {
-    transport: Transport
-}
-
-impl EchoServerProtocol {
-    fn new() -> EchoServerProtocol {
-        EchoServerProtocol {transport: Transport::new() }
+struct EchoProtocol;
+impl EchoProtocol {
+    fn new() -> EchoProtocol {
+        EchoProtocol
     }
 }
 
-impl ServerProtocol for EchoServerProtocol {
+impl Protocol for EchoProtocol {
 
- 
-    fn get_transport(&self) -> &Transport {
-        &self.transport
+    fn connection_made(&self, transport: &mut Transport) {
+        let data = b"Hello from the Echo Server, say bye to quit\n";
+        transport.write(data);
     }
 
-    fn data_received(&self, data: &str) {
-        self.get_transport().write(data);
-        if data == "bye" {
-            self.get_transport().hang_up();
+    fn data_received(&self, data: &[u8], transport: &mut Transport) {
+
+        transport.write(data);
+        let s_data = str::from_utf8(data).unwrap().trim();
+
+        debug!("::: [{}]", s_data);
+        if s_data == "bye" {
+            info!("Client want to hang hup");
+            transport.hang_up();
         }
     }
-    
+
+    fn connection_lost(&self, reason: Reason) {
+        match reason {
+            Reason::ConnectionLost => info!("Connection closed by peer"),
+            Reason::HangUp => info!("Hang hup"),
+        }
+    }
 }
 
 
 struct EchoServerFactory;
 
-impl EchoServerFactory {
+impl ServerFactory for EchoServerFactory {
 
     fn new() -> EchoServerFactory {
         EchoServerFactory
     }
-
-}
-
-impl ServerFactory for EchoServerFactory {
-
-    fn build_protocol(client: Client) -> Box<ServerProtocol> {
-       let proto = EchoServerProtocol::new();
+    fn build_protocol(&self) -> Box<Protocol> {
+       let proto = EchoProtocol::new();
        Box::new(proto)
     }
 
@@ -62,11 +65,10 @@ impl ServerFactory for EchoServerFactory {
 
 fn main() {
     env_logger::init().unwrap();
-
-    let mut rio = Rio::new();
+    info!("Start the echo server");
     let server = EchoServerFactory::new();
-
-    rio.listen("0.0.0.0:8888", server);
+    let mut rio = Rio::new();
+    rio.listen("0.0.0.0:8888", Box::new(server));
+    info!("Start running the loop");
     rio.run_forever();
-
 }
