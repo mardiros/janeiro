@@ -6,5 +6,10 @@ extern crate log;
 extern crate env_logger;
 
 mod rio;
+mod transport;
+mod interface;
 
-pub use rio::{Rio, Transport, ServerFactory, Protocol, Reason};
+
+pub use interface::{ServerFactory, Protocol, Reason};
+pub use transport::{Transport};
+pub use rio::{Rio};

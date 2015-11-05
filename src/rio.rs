@@ -9,59 +9,11 @@ use mio::*;
 use mio::tcp::*;
 
 use mio::util::Slab;
+use interface::{ServerFactory, Protocol, Reason};
+use transport::{Transport};
 
 const CONNS_MAX: usize = 65_536;
 const BUF_SIZE: usize = 4096;
-
-pub enum Reason {
-    ConnectionLost,
-    HangUp,
-}
-
-pub struct Transport {
-    buf: Vec<u8>,
-    hup: bool,
-}
-
-
-impl Transport {
-
-    pub fn new() -> Transport {
-        Transport {
-            buf: Vec::new(),
-            hup: false,
-        }
-    }
-
-    pub fn write(&mut self, data: &[u8]) {
-        self.buf.extend(data.iter());
-    }
-
-    pub fn hang_up(&mut self) {
-        info!("Client ask to hang up the connection");
-        self.hup = true;
-    }
-
-}
-
-
-#[allow(unused_variables)]
-pub trait Protocol {
-
-    fn connection_made(&self, transport: &mut Transport) {
-    }
-    fn data_received(&self, data: &[u8], transport: &mut Transport) {
-    }
-    fn connection_lost(&self, reason: Reason) {
-    }
-
-}
-
-pub trait ServerFactory {
-    fn new() -> Self where Self: Sized;
-    fn build_protocol(&self) -> Box<Protocol>;
-}
-
 
 #[derive(Clone)]
 enum ConnectionType {
@@ -176,7 +128,7 @@ impl ClientConnection {
             self.protocol.data_received(&read_bytes[..], &mut self.transport);
         }
 
-        if !self.transport.buf.is_empty() {
+        if self.transport.should_write() {
             let _ = self.handle_write(event_loop, token);
         }
 
@@ -188,9 +140,10 @@ impl ClientConnection {
                     token: Token)
                     -> io::Result<()> {
         {
+            info!("handle write");
             loop {
                 let (len, res) = {
-                    let buf = &mut self.transport.buf;
+                    let buf = &mut self.transport.buf();
                     let len = buf.len();
                     let s_data = str::from_utf8(&buf[..]).unwrap();
                     info!(">>> {}", s_data);
@@ -217,8 +170,8 @@ impl ClientConnection {
                 }
                 break;
             }
-            self.transport.buf.clear();
-            if self.transport.hup {
+            self.transport.clear();
+            if self.transport.hup() {
                 self.peer_hup = true;
             }
         }
@@ -356,7 +309,7 @@ impl MioHandler {
             {
                 let client = &self.connections[token].client_ref();
                 info!("Connection closed {:?}", client.peer_addr().unwrap());
-                if client.transport.hup {
+                if client.transport.hup() {
                     client.protocol.connection_lost(Reason::HangUp);
                 } else {
                     client.protocol.connection_lost(Reason::ConnectionLost);
