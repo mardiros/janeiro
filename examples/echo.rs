@@ -1,5 +1,4 @@
-extern crate mio;
-extern crate nix;
+extern crate janeiro;
 
 #[macro_use]
 extern crate log;
@@ -7,8 +6,6 @@ extern crate env_logger;
 
 
 use std::str;
-
-mod janeiro;
 
 use janeiro::{Rio, Transport, ServerFactory, Protocol, Reason};
 

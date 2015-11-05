@@ -3,8 +3,8 @@ use std::str;
 use std::str::FromStr;
 use std::io;
 
-//use mio::{EventLoop, Handler, Token, EventSet, PollOpt};
-//use mio::tcp::{TcpListener, TcpStream};
+// use mio::{EventLoop, Handler, Token, EventSet, PollOpt};
+// use mio::tcp::{TcpListener, TcpStream};
 use mio::*;
 use mio::tcp::*;
 
@@ -15,7 +15,7 @@ const BUF_SIZE: usize = 4096;
 
 pub enum Reason {
     ConnectionLost,
-    HangUp
+    HangUp,
 }
 
 pub struct Transport {
@@ -23,12 +23,13 @@ pub struct Transport {
     hup: bool,
 }
 
+
 impl Transport {
 
     pub fn new() -> Transport {
         Transport {
             buf: Vec::new(),
-            hup: false
+            hup: false,
         }
     }
 
@@ -47,9 +48,12 @@ impl Transport {
 #[allow(unused_variables)]
 pub trait Protocol {
 
-    fn connection_made(&self, transport: &mut Transport) {}
-    fn data_received(&self, data: &[u8], transport: &mut Transport) {}
-    fn connection_lost(&self, reason: Reason) {}
+    fn connection_made(&self, transport: &mut Transport) {
+    }
+    fn data_received(&self, data: &[u8], transport: &mut Transport) {
+    }
+    fn connection_lost(&self, reason: Reason) {
+    }
 
 }
 
@@ -62,7 +66,7 @@ pub trait ServerFactory {
 #[derive(Clone)]
 enum ConnectionType {
     Server,
-    Client
+    Client,
 }
 
 
@@ -102,8 +106,8 @@ impl ClientConnection {
 
     fn reregister(&mut self,
                   event_loop: &mut EventLoop<MioHandler>,
-                  token: Token,
-                 ) -> io::Result<()> {
+                  token: Token)
+                  -> io::Result<()> {
 
         // have somewhere to read to and someone to receive from
         if !self.peer_hup || false {
@@ -113,14 +117,17 @@ impl ClientConnection {
             self.interest.remove(EventSet::readable());
         }
 
-        event_loop.reregister(
-                &self.socket, token,
-                self.interest, PollOpt::edge() | PollOpt::oneshot()
-                )
+        event_loop.reregister(&self.socket,
+                              token,
+                              self.interest,
+                              PollOpt::edge() | PollOpt::oneshot())
     }
 
 
-    fn handle_hup(&mut self, event_loop: &mut EventLoop<MioHandler>, token: Token) -> io::Result<()> {
+    fn handle_hup(&mut self,
+                  event_loop: &mut EventLoop<MioHandler>,
+                  token: Token)
+                  -> io::Result<()> {
         if self.interest == EventSet::hup() {
             self.interest = EventSet::none();
             try!(event_loop.deregister(&self.socket));
@@ -131,37 +138,39 @@ impl ClientConnection {
         Ok(())
     }
 
-    fn handle_read(&mut self, event_loop: &mut EventLoop<MioHandler>, token: Token) -> io::Result<()> {
+    fn handle_read(&mut self,
+                   event_loop: &mut EventLoop<MioHandler>,
+                   token: Token)
+                   -> io::Result<()> {
         {
             let mut read_bytes: Vec<u8> = Vec::new();
             loop {
                 let (buf, read_len) = {
                     let mut buf = [0; BUF_SIZE];
                     let read_len = self.socket.try_read(&mut buf[..]);
-                    //let s_data = str::from_utf8(&buf).unwrap();
-                    //info!("<<< {}", s_data);
+                    // let s_data = str::from_utf8(&buf).unwrap();
+                    // info!("<<< {}", s_data);
                     (buf, read_len)
                 };
                 match read_len {
                     Ok(None) => {
                         info!("read to end");
                         break;
-                    },
+                    }
                     Ok(Some(len)) => {
                         read_bytes.extend(buf[0..len].iter());
                         if len < BUF_SIZE {
                             info!("Nothing more to read");
                             break;
-                        }
-                        else {
+                        } else {
                             info!("More data to read");
                         }
-                    },
+                    }
                     Err(_) => {
                         info!("Error while reading to socket, consider to hang up");
                         break;
                     }
-                };
+                }
             }
             let _ = self.reregister(event_loop, token);
             self.protocol.data_received(&read_bytes[..], &mut self.transport);
@@ -174,7 +183,10 @@ impl ClientConnection {
         Ok(())
     }
 
-    fn handle_write(&mut self, event_loop: &mut EventLoop<MioHandler>, token: Token) -> io::Result<()> {
+    fn handle_write(&mut self,
+                    event_loop: &mut EventLoop<MioHandler>,
+                    token: Token)
+                    -> io::Result<()> {
         {
             loop {
                 let (len, res) = {
@@ -182,26 +194,26 @@ impl ClientConnection {
                     let len = buf.len();
                     let s_data = str::from_utf8(&buf[..]).unwrap();
                     info!(">>> {}", s_data);
-    
+
                     let res = self.socket.try_write(&buf[..]);
                     (len, res)
                 };
                 match res {
                     Ok(None) => {
                         break;
-                    },
+                    }
                     Ok(Some(written_len)) => {
                         info!("Write {}, attempt {}", written_len, len);
                         if written_len != len {
                             info!("Something is going wrong with the socket");
                             break;
                         }
-                    },
+                    }
                     Err(_) => {
                         info!("Error while writing to the socket");
                         self.peer_hup = true;
                         break;
-                    },
+                    }
                 }
                 break;
             }
@@ -222,23 +234,25 @@ struct Connection {
 }
 
 
+#[allow(dead_code)]
 impl Connection {
-    fn new_server(server: Box<ServerFactory>,
-                  socket: TcpListener) -> Connection {
+    fn new_server(server: Box<ServerFactory>, socket: TcpListener) -> Connection {
         Connection {
             connection_type: ConnectionType::Server,
-            server: Some(ServerConnection{server: server, socket: socket}),
+            server: Some(ServerConnection {
+                server: server,
+                socket: socket,
+            }),
             client: None,
-            }
+        }
     }
 
-    fn new_client(protocol: Box<Protocol>,
-                  socket: TcpStream) -> Connection {
+    fn new_client(protocol: Box<Protocol>, socket: TcpStream) -> Connection {
         Connection {
             connection_type: ConnectionType::Client,
             client: Some(ClientConnection::new(protocol, socket)),
             server: None,
-            }
+        }
     }
 
     fn server_ref(&self) -> &ServerConnection {
@@ -257,14 +271,14 @@ impl Connection {
         return match self.connection_type {
             ConnectionType::Server => {
                 true
-            },
+            }
             ConnectionType::Client => {
                 match self.client_ref().peer_addr() {
                     Ok(_) => true,
                     Err(_) => false,
                 }
-            },
-        }
+            }
+        };
     }
 
 }
@@ -274,14 +288,17 @@ struct MioHandler {
     connections: Slab<Connection>,
 }
 
+
 impl MioHandler {
+
     pub fn new() -> MioHandler {
-        MioHandler {
-            connections: Slab::new(CONNS_MAX),
-            }
+        MioHandler { connections: Slab::new(CONNS_MAX) }
     }
 
-    fn listen(&mut self, event_loop: &mut EventLoop<MioHandler>, addr: &str, server: Box<ServerFactory>) {
+    fn listen(&mut self,
+              event_loop: &mut EventLoop<MioHandler>,
+              addr: &str,
+              server: Box<ServerFactory>) {
         let sock_addr: SocketAddr = FromStr::from_str(addr).unwrap();
         debug!("Bind the server socket {}", addr);
         let sock = TcpListener::bind(&sock_addr).unwrap();
@@ -289,18 +306,23 @@ impl MioHandler {
         match result {
             Ok(token) => {
                 let _ = event_loop.register(&self.connections[token].server_ref().socket,
-                    token, EventSet::readable(), PollOpt::edge());
-            },
-            Err(_) => error!("Cannot register server")
+                                            token,
+                                            EventSet::readable(),
+                                            PollOpt::edge());
+            }
+            Err(_) => error!("Cannot register server"),
         }
     }
 
-    fn handle_server(&mut self, event_loop: &mut EventLoop<MioHandler>, token: Token) -> io::Result<()> {
+    fn handle_server(&mut self,
+                     event_loop: &mut EventLoop<MioHandler>,
+                     token: Token)
+                     -> io::Result<()> {
         loop {
             let (sock, addr) = match try!(self.connections[token].server_ref().socket.accept()) {
                 None => break,
                 Some(sock) => sock,
-                };
+            };
 
             info!("Accepting connection from {:?}", addr);
 
@@ -317,14 +339,12 @@ impl MioHandler {
                     debug!("Registering procotol");
                     let mut client = self.connections[client_token].client_mut();
                     client.protocol.connection_made(&mut client.transport);
-                    try!(event_loop.register(
-                        &client.socket,
-                        client_token,
-                        EventSet::readable() | EventSet::writable(),
-                        PollOpt::edge() | PollOpt::oneshot())
-                        );
-                    }
-                Err(_) => error!("Cannot register client")
+                    try!(event_loop.register(&client.socket,
+                                             client_token,
+                                             EventSet::readable() | EventSet::writable(),
+                                             PollOpt::edge() | PollOpt::oneshot()));
+                }
+                Err(_) => error!("Cannot register client"),
 
             }
         }
@@ -338,8 +358,7 @@ impl MioHandler {
                 info!("Connection closed {:?}", client.peer_addr().unwrap());
                 if client.transport.hup {
                     client.protocol.connection_lost(Reason::HangUp);
-                }
-                else {
+                } else {
                     client.protocol.connection_lost(Reason::ConnectionLost);
                 }
             }
@@ -347,8 +366,12 @@ impl MioHandler {
         }
     }
 
-    fn handle_client(&mut self, event_loop: &mut EventLoop<MioHandler>, token: Token, events: EventSet) -> io::Result<()> {
-         debug!("handle client",);
+    fn handle_client(&mut self,
+                     event_loop: &mut EventLoop<MioHandler>,
+                     token: Token,
+                     events: EventSet)
+                     -> io::Result<()> {
+        debug!("handle client",);
         if events.is_hup() {
             debug!("handle hup");
             let (_, finished) = {
@@ -364,7 +387,7 @@ impl MioHandler {
             }
         }
 
-       if !&self.connections.contains(token) || !&self.connections[token].alive() {
+        if !&self.connections.contains(token) || !&self.connections[token].alive() {
             debug!("Don't pannic, not handling client");
             return Ok(());
         }
@@ -411,10 +434,11 @@ impl Handler for MioHandler {
             ConnectionType::Server => self.handle_server(event_loop, token),
             ConnectionType::Client => self.handle_client(event_loop, token, events),
         };
-        return
+        return;
     }
 
 }
+
 
 pub struct Rio {
     handler: MioHandler,
@@ -429,7 +453,7 @@ impl Rio {
         let handler = MioHandler::new();
         Rio {
             handler: handler,
-            event_loop: event_loop
+            event_loop: event_loop,
         }
     }
 
@@ -443,4 +467,3 @@ impl Rio {
         self.event_loop.run(&mut self.handler).unwrap();
     }
 }
-
