@@ -25,7 +25,7 @@ impl Transport {
 
     /// Will close the connection
     pub fn hang_up(&mut self) {
-        info!("Client ask to hang up the connection");
+        info!("Peer ask to hang up the connection");
         self.hup = true;
     }
 

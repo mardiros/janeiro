@@ -268,6 +268,7 @@ impl MioHandler {
         }
     }
 
+
     fn handle_server(&mut self,
                      event_loop: &mut EventLoop<MioHandler>,
                      token: Token)
@@ -376,6 +377,30 @@ impl MioHandler {
         Ok(())
     }
 
+    fn connect(&mut self,
+              event_loop: &mut EventLoop<MioHandler>,
+              addr: &str,
+              client: Box<Protocol>) {
+
+        let sock_addr: SocketAddr = FromStr::from_str(addr).unwrap();
+        debug!("Connect to the socket {}", addr);
+
+        let sock = TcpStream::connect(&sock_addr).unwrap();
+        let result = self.connections.insert(Connection::new_client(client, sock));
+        match result {
+            Ok(token) => {
+                let client = self.connections[token].client_mut();
+                client.protocol.connection_made(&mut client.transport);
+                let _ = event_loop.register(&client.socket,
+                                            token,
+                                            EventSet::readable() | EventSet::writable(),
+                                            PollOpt::edge());
+            }
+            Err(_) => error!("Cannot register server"),
+        }
+
+    }
+
 }
 
 impl Handler for MioHandler {
@@ -421,9 +446,18 @@ impl Rio {
         self.handler.listen(&mut self.event_loop, addr, server);
     }
 
+    /// Will listen on the given address when the loop will start.
+    /// The ServerFactory.build_protocol method will be called on every
+    /// new client connection.
+    pub fn connect(&mut self, addr: &str, client: Box<Protocol>) {
+        info!("Rio is connecting to {}", addr);
+        self.handler.connect(&mut self.event_loop, addr, client);
+    }
+
     /// Start the io loop
     pub fn run_forever(&mut self) {
         info!("Rio run forever");
         self.event_loop.run(&mut self.handler).unwrap();
     }
+
 }

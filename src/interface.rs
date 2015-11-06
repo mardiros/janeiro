@@ -34,11 +34,8 @@ pub trait Protocol {
 /// Used by the ioloop to instanciate a protocol on each new connection.
 pub trait ServerFactory {
 
-    //fn new() -> Self where Self: Sized;
-
     /// Called every time a server socket need to handle a client connection.
     /// There is on instance of protocol per connection, that live until
     /// the connection is closed.
     fn build_protocol(&self) -> Box<Protocol>;
 }
-
