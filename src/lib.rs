@@ -1,3 +1,12 @@
+//!
+//! A framework for writing network application with a non-blocking IO loop. 
+//! Based on the metal io library.
+//!
+//! Currently support TCP.
+//!
+//! Totally alpha.
+//!
+
 extern crate mio;
 extern crate nix;
 

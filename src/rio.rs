@@ -15,6 +15,7 @@ use transport::{Transport};
 const CONNS_MAX: usize = 65_536;
 const BUF_SIZE: usize = 4096;
 
+
 #[derive(Clone)]
 enum ConnectionType {
     Server,
@@ -393,6 +394,7 @@ impl Handler for MioHandler {
 }
 
 
+/// The I/O Loop
 pub struct Rio {
     handler: MioHandler,
     event_loop: EventLoop<MioHandler>,
@@ -401,6 +403,7 @@ pub struct Rio {
 
 impl Rio {
 
+    /// Instanciate the IOLoop, should be called once.
     pub fn new() -> Rio {
         let event_loop: EventLoop<MioHandler> = EventLoop::new().unwrap();
         let handler = MioHandler::new();
@@ -410,11 +413,15 @@ impl Rio {
         }
     }
 
+    /// Will listen on the given address when the loop will start.
+    /// The ServerFactory.build_protocol method will be called on every
+    /// new client connection.
     pub fn listen(&mut self, addr: &str, server: Box<ServerFactory>) {
         info!("Rio is listenning on {}", addr);
         self.handler.listen(&mut self.event_loop, addr, server);
     }
 
+    /// Start the io loop
     pub fn run_forever(&mut self) {
         info!("Rio run forever");
         self.event_loop.run(&mut self.handler).unwrap();
