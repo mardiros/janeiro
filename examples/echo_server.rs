@@ -47,11 +47,14 @@ impl Protocol for EchoProtocol {
 
 struct EchoServerFactory;
 
-impl ServerFactory for EchoServerFactory {
-
+impl EchoServerFactory {
     fn new() -> EchoServerFactory {
         EchoServerFactory
     }
+}
+
+impl ServerFactory for EchoServerFactory {
+
     fn build_protocol(&self) -> Box<Protocol> {
        let proto = EchoProtocol::new();
        Box::new(proto)
