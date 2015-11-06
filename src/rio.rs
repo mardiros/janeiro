@@ -310,7 +310,10 @@ impl MioHandler {
         if finished {
             {
                 let client = &self.connections[token].client_ref();
-                info!("Connection closed {:?}", client.peer_addr().unwrap());
+                match client.peer_addr() {
+                    Ok(addr) => info!("Connection closed {:?}", addr),
+                    Err(_) => error!("Connection closed (Peer already disconnected)"),
+                }
                 if client.transport.hup() {
                     client.protocol.connection_lost(Reason::HangUp);
                 } else {
@@ -336,7 +339,6 @@ impl MioHandler {
             };
             if finished {
                 info!("Connection closed");
-                self.connections.remove(token);
                 self.handle_client_finished(token, true);
                 info!("Token removed");
             }
@@ -396,7 +398,7 @@ impl MioHandler {
                                             EventSet::readable() | EventSet::writable(),
                                             PollOpt::edge());
             }
-            Err(_) => error!("Cannot register server"),
+            Err(_) => error!("Cannot register client"),
         }
 
     }
