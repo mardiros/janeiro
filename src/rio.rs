@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::str;
 use std::str::FromStr;
 use std::io;
 
@@ -141,13 +140,13 @@ impl ClientConnection {
                     token: Token)
                     -> io::Result<()> {
         {
-            info!("handle write");
+            debug!("handle write");
             loop {
                 let (len, res) = {
                     let buf = &mut self.transport.buf();
                     let len = buf.len();
-                    let s_data = str::from_utf8(&buf[..]).unwrap();
-                    info!(">>> {}", s_data);
+                    //let s_data = str::from_utf8(&buf[..]).unwrap();
+                    //info!(">>> {}", s_data);
 
                     let res = self.socket.try_write(&buf[..]);
                     (len, res)
@@ -157,14 +156,14 @@ impl ClientConnection {
                         break;
                     }
                     Ok(Some(written_len)) => {
-                        info!("Write {}, attempt {}", written_len, len);
+                        debug!("Write {}, attempt {}", written_len, len);
                         if written_len != len {
-                            info!("Something is going wrong with the socket");
+                            debug!("Something is going wrong with the socket");
                             break;
                         }
                     }
                     Err(_) => {
-                        info!("Error while writing to the socket");
+                        error!("Error while writing to the socket, disconnecting");
                         self.peer_hup = true;
                         break;
                     }
