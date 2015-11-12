@@ -1,13 +1,13 @@
 extern crate janeiro;
 
-#[macro_use]
-extern crate log;
-extern crate env_logger;
+//#[macro_use]
+//extern crate log;
+//extern crate env_logger;
 
 
 use std::str;
 
-use janeiro::{Rio, Transport, ServerFactory, Protocol, Reason};
+use janeiro::{Rio, Transport, ServerFactory, Protocol};
 
 
 struct EchoProtocol;
@@ -29,19 +29,20 @@ impl Protocol for EchoProtocol {
         transport.write(data);
         let s_data = str::from_utf8(data).unwrap().trim();
 
-        debug!("::: [{}]", s_data);
+        //debug!("::: [{}]", s_data);
         if s_data == "bye" {
-            info!("Client want to hang hup");
+            //info!("Client want to hang hup");
             transport.hang_up();
         }
     }
-
+    /*
     fn connection_lost(&self, reason: Reason) {
         match reason {
             Reason::ConnectionLost => info!("Connection closed by peer"),
             Reason::HangUp => info!("Hang hup"),
         }
     }
+    */
 }
 
 
@@ -63,12 +64,12 @@ impl ServerFactory for EchoServerFactory {
 }
 
 
-fn main() {
-    env_logger::init().unwrap();
-    info!("Start the echo server");
+pub fn main() {
+    //env_logger::init().unwrap();
+    //info!("Start the echo server");
     let server = EchoServerFactory::new();
     let mut rio = Rio::new();
     rio.listen("0.0.0.0:8888", Box::new(server));
-    info!("Start running the loop");
+    //info!("Start running the loop");
     rio.run_forever();
 }

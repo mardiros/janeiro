@@ -7,7 +7,7 @@ extern crate env_logger;
 
 use std::str;
 
-use janeiro::{Rio, Transport, ServerFactory, Protocol, Reason};
+use janeiro::{Rio, Transport, Protocol, Reason};
 
 
 struct HttpClientProtocol;
@@ -25,6 +25,7 @@ impl Protocol for HttpClientProtocol {
         transport.write(data);    
     }
 
+    #[allow(unused_variables)]
     fn data_received(&self, data: &[u8], transport: &mut Transport) {
         let s_data = str::from_utf8(data).unwrap().trim();
 

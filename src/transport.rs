@@ -52,3 +52,32 @@ impl Transport {
     }
 
 }
+
+
+
+
+#[cfg(test)]
+mod test {
+    use super::Transport;
+
+    #[test]
+    pub fn test_transport() {
+        let mut transport = Transport::new();
+        transport.write(b"teleport");
+
+        {
+            let buf = &transport.buf();
+            assert_eq!(&buf[..], b"teleport");
+        }
+
+        assert!(&transport.should_write());
+        transport.clear();
+        assert!(!&transport.should_write());
+
+        assert!(!&transport.hup());
+        transport.hang_up();
+        assert!(&transport.hup());
+
+    }
+
+}
