@@ -9,6 +9,7 @@
 
 extern crate mio;
 extern crate nix;
+extern crate slab;
 
 #[macro_use]
 extern crate log;

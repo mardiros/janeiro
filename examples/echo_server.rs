@@ -1,8 +1,8 @@
 extern crate janeiro;
 
-//#[macro_use]
-//extern crate log;
-//extern crate env_logger;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 
 use std::str;
@@ -65,11 +65,11 @@ impl ServerFactory for EchoServerFactory {
 
 
 pub fn main() {
-    //env_logger::init().unwrap();
-    //info!("Start the echo server");
+    env_logger::init().unwrap();
+    info!("Start the echo server");
     let server = EchoServerFactory::new();
     let mut rio = Rio::new();
     rio.listen("0.0.0.0:8888", Box::new(server));
-    //info!("Start running the loop");
+    info!("Start running the loop");
     rio.run_forever();
 }
