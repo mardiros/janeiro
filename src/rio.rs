@@ -129,12 +129,16 @@ struct Connection {
     connection_type: ConnectionType,
     server: Option<ServerConnection>,
     client: Option<ClientConnection>,
+    peer_addr: SocketAddr,
 }
 
 
 #[allow(dead_code)]
 impl Connection {
-    fn new_server(server: Box<ServerFactory>, socket: TcpListener) -> Connection {
+    fn new_server(server: Box<ServerFactory>,
+                  peer_addr: SocketAddr,
+                  socket: TcpListener)
+                  -> Connection {
         Connection {
             connection_type: ConnectionType::Server,
             server: Some(ServerConnection {
@@ -142,15 +146,21 @@ impl Connection {
                 socket: socket,
             }),
             client: None,
+            peer_addr: peer_addr,
         }
     }
 
-    fn new_client(protocol: Box<Protocol>, socket: TcpStream) -> Connection {
+    fn new_client(protocol: Box<Protocol>, peer_addr: SocketAddr, socket: TcpStream) -> Connection {
         Connection {
             connection_type: ConnectionType::Client,
             client: Some(ClientConnection::new(protocol, socket)),
             server: None,
+            peer_addr: peer_addr,
         }
+    }
+
+    fn peer_addr(&self) -> SocketAddr {
+        self.peer_addr
     }
 
     fn server_ref(&self) -> &ServerConnection {
@@ -205,7 +215,7 @@ impl Rio {
         let sock_addr: SocketAddr = FromStr::from_str(addr).unwrap();
         debug!("Bind the server socket {}", addr);
         let sock = TcpListener::bind(&sock_addr).unwrap();
-        let result = self.connections.insert(Connection::new_server(server, sock));
+        let result = self.connections.insert(Connection::new_server(server, sock_addr, sock));
         match result {
             Ok(token) => {
                 let _ = self.poll.register(&self.connections[token].server_ref().socket,
@@ -227,7 +237,7 @@ impl Rio {
         debug!("Connect to the socket {}", addr);
 
         let sock = TcpStream::connect(&sock_addr).unwrap();
-        let result = self.connections.insert(Connection::new_client(client, sock));
+        let result = self.connections.insert(Connection::new_client(client, sock_addr, sock));
         match result {
             Ok(token) => {
                 let client = self.connections[token].client_mut();
@@ -274,7 +284,7 @@ impl Rio {
             };
 
             debug!("Take a token for the connection");
-            let result = self.connections.insert(Connection::new_client(protocol, sock));
+            let result = self.connections.insert(Connection::new_client(protocol, addr, sock));
             match result {
                 Ok(client_token) => {
                     debug!("Registering procotol");
@@ -295,8 +305,16 @@ impl Rio {
     fn handle_client(&mut self, token: Token, event: Event) -> io::Result<()> {
         debug!("handle client",);
 
-        if !&self.connections.contains(token) || !&self.connections[token].alive() {
-            error!("Ignoring unkown an token to handle");
+        if !&self.connections.contains(token) {
+            error!("Ignoring unkown token to handle");
+            return Ok(());
+        }
+
+        if !&self.connections[token].alive() {
+            error!("Connection failed {:?}", &self.connections[token].peer_addr);
+            info!("Removing connection {:?}",
+                  &self.connections[token].peer_addr);
+            self.connections.remove(token);
             return Ok(());
         }
 
