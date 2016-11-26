@@ -9,7 +9,6 @@ pub struct Transport {
 
 
 impl Transport {
-
     #[doc(hidden)]
     pub fn new() -> Transport {
         Transport {
@@ -50,7 +49,6 @@ impl Transport {
     pub fn clear(&mut self) {
         self.buf.clear();
     }
-
 }
 
 

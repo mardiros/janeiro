@@ -1,5 +1,4 @@
-//!
-//! A framework for writing network application with a non-blocking IO loop. 
+//! A framework for writing network application with a non-blocking IO loop.
 //! Based on the metal io library.
 //!
 //! Currently support TCP.
@@ -21,5 +20,5 @@ mod interface;
 
 
 pub use interface::{ServerFactory, Protocol, Reason};
-pub use transport::{Transport};
-pub use rio::{Rio};
+pub use transport::Transport;
+pub use rio::Rio;
