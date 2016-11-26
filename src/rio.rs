@@ -2,16 +2,14 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 
 use std::io;
-use std::io::{Read, Write};  // Used for TcpStream.read,  TcpStream.write
 
+use std::io::{Read, Write};  // Used for TcpStream.read,  TcpStream.write
 use mio::{Poll, Token, Events, Event, Ready, PollOpt};
 use mio::tcp::{TcpListener, TcpStream};
-//use mio::*;
-//use mio::tcp::*;
 
 use slab;
 use interface::{ServerFactory, Protocol, Reason};
-use transport::{Transport};
+use transport::Transport;
 
 const CONNS_MAX: usize = 65_536;
 const BUF_SIZE: usize = 4096;
@@ -36,18 +34,15 @@ struct ClientConnection {
     protocol: Box<Protocol>,
     socket: TcpStream,
     interest: Ready,
-    peer_hup: bool,
     transport: Transport,
 }
 
 impl ClientConnection {
-
     fn new(protocol: Box<Protocol>, socket: TcpStream) -> ClientConnection {
         ClientConnection {
             protocol: protocol,
             socket: socket,
             interest: Ready::hup() | Ready::readable(),
-            peer_hup: false,
             transport: Transport::new(),
         }
     }
@@ -60,112 +55,72 @@ impl ClientConnection {
         self.interest == Ready::none()
     }
 
-    fn reregister(&mut self,
-                  event_loop: &mut Poll,
-                  token: Token)
-                  -> io::Result<()> {
-
-        // have somewhere to read to and someone to receive from
-        if !self.peer_hup || false {
-            info!("Insert read interest");
-            self.interest.insert(Ready::readable());
-        } else {
-            self.interest.remove(Ready::readable());
-        }
-
-        event_loop.reregister(&self.socket,
-                              token,
-                              self.interest,
-                              PollOpt::edge() | PollOpt::oneshot())
+    fn handle_hup(&mut self) {
+        self.interest = Ready::none();
     }
 
-
-    fn handle_hup(&mut self,
-                  event_loop: &mut Poll,
-                  token: Token)
-                  -> io::Result<()> {
-        if self.interest == Ready::hup() {
-            self.interest = Ready::none();
-            try!(event_loop.deregister(&self.socket));
-        } else {
-            self.peer_hup = true;
-            let _ = self.reregister(event_loop, token);
-        }
-        Ok(())
-    }
-
-    fn handle_read(&mut self,
-                   event_loop: &mut Poll,
-                   token: Token)
-                   -> io::Result<()> {
-        {
-            let mut read_bytes: Vec<u8> = Vec::new();
-            loop {
-                let (buf, read_len) = {
-                    let mut buf = [0; BUF_SIZE];
-                    let read_len = try!(self.socket.read(&mut buf[..]));
-                    // let s_data = str::from_utf8(&buf).unwrap();
-                    // info!("<<< {}", s_data);
-                    (buf, read_len)
-                };
-                if read_len > 0 {
-                    read_bytes.extend(buf[0..read_len].iter());
-                    if read_len < BUF_SIZE {
-                        info!("Nothing more to read");
-                        break;
-                    } else {
-                        info!("More data to read");
-                    }
+    fn handle_read(&mut self) -> io::Result<()> {
+        let mut read_bytes: Vec<u8> = Vec::new();
+        loop {
+            let (buf, read_len) = {
+                let mut buf = [0; BUF_SIZE];
+                let read_len = try!(self.socket.read(&mut buf[..]));
+                // let s_data = str::from_utf8(&buf).unwrap();
+                // info!("<<< {}", s_data);
+                (buf, read_len)
+            };
+            if read_len > 0 {
+                read_bytes.extend(buf[0..read_len].iter());
+                if read_len < BUF_SIZE {
+                    info!("Nothing more to read");
+                    break;
+                } else {
+                    info!("More data to read");
                 }
             }
-            let _ = self.reregister(event_loop, token);
-            self.protocol.data_received(&read_bytes[..], &mut self.transport);
         }
-
-        if self.transport.should_write() {
-            let _ = self.handle_write(event_loop, token);
-        }
+        self.protocol.data_received(&read_bytes[..], &mut self.transport);
 
         Ok(())
     }
 
-    fn handle_write(&mut self,
-                    event_loop: &mut Poll,
-                    token: Token)
-                    -> io::Result<()> {
+    fn handle_write(&mut self) {
 
-        {  // a block where transport is mutable
+        {
+            // a block where transport muting
 
             debug!("handle write");
             let buf = &mut self.transport.buf();
             let to_write_len = buf.len();
             if to_write_len > 0 {
-                //let s_data = str::from_utf8(&buf[..]).unwrap();
-                //info!(">>> {}", s_data);
+                // let s_data = str::from_utf8(&buf[..]).unwrap();
+                // info!(">>> {}", s_data);
 
                 let result = self.socket.write(&buf[..]);
                 match result {
                     Ok(written_len) => {
                         debug!("Write {} bytes", written_len);
                         if to_write_len != written_len {
-                            error!("{} bytes to write but {} written, hanging up", to_write_len, written_len);
-                            self.peer_hup = true;
+                            error!("{} bytes to write but {} written, hanging up",
+                                   to_write_len,
+                                   written_len);
+                            self.interest = Ready::hup();
                         }
-                    },
+                    }
                     Err(err) => {
                         error!("Error {} while writing to the socket, disconnecting", err);
-                        self.peer_hup = true;
-                    },
+                        self.interest = Ready::hup();
+                    }
                 };
             }
-        }
+        };
 
         self.transport.clear();
-        if self.transport.hup() {
-            self.peer_hup = true;
-        }
 
-        self.reregister(event_loop, token)
+        if self.transport.hup() {
+            info!("Peer is disconnecting, will unregister connection");
+            self.interest = Ready::none();
+        }
     }
 }
 
@@ -212,9 +167,7 @@ impl Connection {
 
     fn alive(&self) -> bool {
         return match self.connection_type {
-            ConnectionType::Server => {
-                true
-            }
+            ConnectionType::Server => true,
             ConnectionType::Client => {
                 match self.client_ref().peer_addr() {
                     Ok(_) => true,
@@ -223,7 +176,6 @@ impl Connection {
             }
         };
     }
-
 }
 
 
@@ -235,7 +187,6 @@ pub struct Rio {
 
 
 impl Rio {
-
     /// Instanciate the IOLoop, should be called once.
     pub fn new() -> Rio {
         let poll: Poll = Poll::new().unwrap();
@@ -285,6 +236,7 @@ impl Rio {
                                            token,
                                            Ready::readable() | Ready::writable(),
                                            PollOpt::edge());
+                debug!("Connected to the socket {}", addr);
             }
             Err(_) => error!("Cannot register client"),
         }
@@ -309,9 +261,7 @@ impl Rio {
         }
     }
 
-    fn handle_server(&mut self,
-                     token: Token)
-                     -> io::Result<()> {
+    fn handle_server(&mut self, token: Token) -> io::Result<()> {
         loop {
             let (sock, addr) = try!(self.connections[token].server_ref().socket.accept());
 
@@ -333,90 +283,74 @@ impl Rio {
                     try!(self.poll.register(&client.socket,
                                             client_token,
                                             Ready::readable() | Ready::writable(),
-                                            PollOpt::edge() | PollOpt::oneshot()
-                                            ));
+                                            PollOpt::edge() | PollOpt::oneshot()));
                 }
                 Err(_) => error!("Cannot register client"),
 
             }
         }
-        Ok(())
+        Ok(())  // the loop should break with event SIGTERM
     }
 
-    fn handle_client(&mut self,
-                     token: Token,
-                     event: Event)
-                     -> io::Result<()> {
+    fn handle_client(&mut self, token: Token, event: Event) -> io::Result<()> {
         debug!("handle client",);
-        let kind = event.kind();
-        if kind.is_hup() {
-            debug!("handle hup");
-            let (_, finished) = {
-                let mut client = self.connections[token].client_mut();
-                let mut poll = &mut self.poll;
-                let res = client.handle_hup(poll, token);
-                (res, client.is_finished())
-            };
-            if finished {
-                info!("Connection closed");
-                self.handle_client_finished(token, true);
-                info!("Token removed");
-            }
-        }
 
         if !&self.connections.contains(token) || !&self.connections[token].alive() {
-            debug!("Don't pannic, not handling client");
+            error!("Ignoring unkown an token to handle");
             return Ok(());
         }
 
+        let kind = event.kind();
+        let mut finished = false;
         let client_addr = &self.connections[token].client_ref().peer_addr().unwrap().clone();
-        debug!("handle client {:?}", client_addr);
-        if kind.is_readable() {
-            debug!("handle readable {:?}", client_addr);
-            let (_, finished) = {
-                let mut client = &mut self.connections[token].client_mut();
-                let mut poll = &mut self.poll;
-                let res = client.handle_read(poll, token);
-                (res, client.is_finished())
-            };
-            self.handle_client_finished(token, finished);
-        }
+        {
+            let mut client = &mut self.connections[token].client_mut();
 
-        if kind.is_writable() {
-            debug!("handle writable {:?}", client_addr);
-            let (_, finished) = {
-                let mut client = &mut self.connections[token].client_mut();
-                let mut poll = &mut self.poll;
-                let res = client.handle_write(poll, token);
-                (res, client.is_finished())
-            };
-            self.handle_client_finished(token, finished);
-        }
-        let peer_hup = {
-            let client = &self.connections[token].client_ref();
-            client.peer_hup
-        };
-        self.handle_client_finished(token, peer_hup);
-        debug!("end handle client {:?}", client_addr);
-        Ok(())
-    }
+            debug!("handle client {:?}", client_addr);
 
-    fn handle_client_finished(&mut self, token: Token, finished: bool) {
-        if finished {
-            {
-                let client = &self.connections[token].client_ref();
+            if kind.is_hup() {
+                debug!("handle hup {:?}", client_addr);
+                client.handle_hup();
+                finished = true;
+            } else {
+                if kind.is_readable() {
+                    debug!("handle readable {:?}", client_addr);
+                    try!(client.handle_read());
+                }
+
+                if kind.is_writable() || client.transport.should_write() {
+                    debug!("handle writable {:?}", client_addr);
+                    client.handle_write();
+                }
+            }
+
+            if client.is_finished() {
+                debug!("Closing connection with {:?}", client_addr);
                 match client.peer_addr() {
                     Ok(addr) => info!("Connection closed {:?}", addr),
                     Err(_) => error!("Connection closed (Peer already disconnected)"),
                 }
                 if client.transport.hup() {
+                    info!("Peer hang up {:?}", client_addr);
                     client.protocol.connection_lost(Reason::HangUp);
                 } else {
+                    info!("Connection lost {:?}", client_addr);
                     client.protocol.connection_lost(Reason::ConnectionLost);
                 }
+                try!(self.poll.deregister(&client.socket));
+                finished = true;
+            } else {
+                try!(self.poll.reregister(&client.socket, token, client.interest, PollOpt::edge()));
             }
+        }
+
+
+        if finished {
+            info!("Removing connection {:?}", client_addr);
             self.connections.remove(token);
         }
-    }
 
+        debug!("end handle client {:?}", client_addr);
+        Ok(())
+    }
 }
