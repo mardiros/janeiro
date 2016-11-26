@@ -29,7 +29,9 @@ impl Protocol for HttpClientProtocol {
     fn data_received(&self, data: &[u8], transport: &mut Transport) {
         let s_data = str::from_utf8(data).unwrap().trim();
 
-        debug!("{}", s_data);
+        println!("==========================================================");
+        println!("{}", s_data);
+        println!("==========================================================");
         //transport.hang_up();
 
     }
