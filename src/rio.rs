@@ -232,9 +232,8 @@ impl Rio {
     /// The ServerFactory.build_protocol method will be called on every
     /// new client connection.
     pub fn connect(&mut self, addr: &str, client: Box<Protocol>) {
-        info!("Rio is connecting to {}", addr);
+        info!("Connecting to socket {}", addr);
         let sock_addr: SocketAddr = FromStr::from_str(addr).unwrap();
-        debug!("Connect to the socket {}", addr);
 
         let sock = TcpStream::connect(&sock_addr).unwrap();
         let result = self.connections.insert(Connection::new_client(client, sock_addr, sock));
@@ -246,7 +245,7 @@ impl Rio {
                                            token,
                                            Ready::readable() | Ready::writable(),
                                            PollOpt::edge());
-                debug!("Connected to the socket {}", addr);
+                debug!(" socket {} registered in the poller", addr);
             }
             Err(_) => error!("Cannot register client"),
         }
@@ -303,22 +302,28 @@ impl Rio {
     }
 
     fn handle_client(&mut self, token: Token, event: Event) -> io::Result<()> {
-        debug!("handle client",);
+        debug!("handle client, {:?}", event);
 
         if !&self.connections.contains(token) {
             error!("Ignoring unkown token to handle");
             return Ok(());
         }
 
-        if !&self.connections[token].alive() {
+        let kind = event.kind();
+
+        if !&self.connections[token].alive() || kind.is_error() {
             error!("Connection failed {:?}", &self.connections[token].peer_addr);
             info!("Removing connection {:?}",
                   &self.connections[token].peer_addr);
+
+            {
+                let client = &self.connections[token].client_ref();
+                client.protocol.connection_lost(Reason::ConnectionError);
+            }
             self.connections.remove(token);
             return Ok(());
         }
 
-        let kind = event.kind();
         let mut finished = false;
         let client_addr = &self.connections[token].client_ref().peer_addr().unwrap().clone();
         {

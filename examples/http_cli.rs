@@ -40,6 +40,7 @@ impl Protocol for HttpClientProtocol {
         match reason {
             Reason::ConnectionLost => info!("Connection closed by peer"),
             Reason::HangUp => info!("Hang hup"),
+            Reason::ConnectionError => println!("Connection error"),
         }
     }
 }

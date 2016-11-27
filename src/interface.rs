@@ -2,6 +2,8 @@ use transport::Transport;
 
 /// reason of a connection closed.
 pub enum Reason {
+    /// the connection cannot be opened, no socket listen on the host
+    ConnectionError,
     /// the connection has been lost in an unexpected way
     ConnectionLost,
     /// the protocol has been respected to close the connection.
