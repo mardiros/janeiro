@@ -72,15 +72,14 @@ impl ClientConnection {
             if read_len > 0 {
                 read_bytes.extend(buf[0..read_len].iter());
                 if read_len < BUF_SIZE {
-                    info!("Nothing more to read");
+                    debug!("Nothing more to read");
                     break;
                 } else {
-                    info!("More data to read");
+                    debug!("More data to read");
                 }
             }
         }
         self.protocol.data_received(&read_bytes[..], &mut self.transport);
-
         Ok(())
     }
 
