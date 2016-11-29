@@ -1,7 +1,7 @@
+use std::io;
 use std::net::SocketAddr;
 use std::str::FromStr;
-
-use std::io;
+use std::time::Duration;
 
 use std::io::{Read, Write};  // Used for TcpStream.read,  TcpStream.write
 use mio::{Poll, Token, Events, Event, Ready, PollOpt};
@@ -193,6 +193,7 @@ impl Connection {
 pub struct Rio {
     poll: Poll,
     connections: Slab<Connection>,
+    running: bool
 }
 
 
@@ -202,6 +203,7 @@ impl Rio {
         let poll: Poll = Poll::new().unwrap();
         let connections = Slab::with_capacity(CONNS_MAX);
         Rio {
+            running: false,
             poll: poll,
             connections: connections,
         }
@@ -210,7 +212,7 @@ impl Rio {
     /// Will listen on the given address when the loop will start.
     /// The ServerFactory.build_protocol method will be called on every
     /// new client connection.
-    pub fn listen(&mut self, addr: &str, server: Box<ServerFactory>) {
+    pub fn listen(&mut self, addr: &str, server: Box<ServerFactory>) -> Result<Token, io::Error> {
         info!("Rio is listenning on {}", addr);
         let sock_addr: SocketAddr = FromStr::from_str(addr).unwrap();
         debug!("Bind the server socket {}", addr);
@@ -220,18 +222,21 @@ impl Rio {
             Ok(token) => {
                 let _ = self.poll.register(&self.connections[token].server_ref().socket,
                                            token,
-                                           Ready::readable(),
+                                           Ready::readable() | Ready::writable(),
                                            PollOpt::edge());
+                return Ok(token);
             }
-            Err(_) => error!("Cannot register server"),
+            Err(_) => {
+                error!("Cannot register server {:?}", addr);
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Cannot register server {:?}", addr)));
+            }
         }
-
     }
 
     /// Will listen on the given address when the loop will start.
     /// The ServerFactory.build_protocol method will be called on every
     /// new client connection.
-    pub fn connect(&mut self, addr: &str, client: Box<Protocol>) {
+    pub fn connect(&mut self, addr: &str, client: Box<Protocol>) -> Result<Token, io::Error> {
         info!("Connecting to socket {}", addr);
         let sock_addr: SocketAddr = FromStr::from_str(addr).unwrap();
 
@@ -243,35 +248,54 @@ impl Rio {
                 client.protocol.connection_made(&mut client.transport);
                 let _ = self.poll.register(&client.socket,
                                            token,
-                                           Ready::readable() | Ready::writable(),
-                                           PollOpt::edge());
+                                           Ready::all(),
+                                           PollOpt::all());
                 debug!(" socket {} registered in the poller", addr);
+                return Ok(token);
             }
-            Err(_) => error!("Cannot register client"),
+            Err(_) => {
+                error!("Cannot register client {:?}", addr);
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Cannot register client {:?}", addr)));
+            }
         }
     }
 
     /// Start the io loop
     pub fn run_forever(&mut self) {
-        info!("Rio run forever");
+        self.run_until(&|_: &Rio| -> bool { true });
+    }
 
+    pub fn run_until(&mut self, is_done: &Fn(&Rio) -> bool) {
+
+        info!("Start polling");
+
+        let timeout = Duration::new(1, 0);
         let mut events = Events::with_capacity(1024);
 
-        loop {
-            self.poll.poll(&mut events, None).unwrap();
+        self.running = true;
+        while self.running {
+            debug!("Polling...");
+            self.poll.poll(&mut events, Some(timeout)).unwrap();
 
             for event in events.iter() {
                 let token = event.token();
+                debug!("Got event for {:?}", token);
                 let _ = match self.connections[token].connection_type {
                     ConnectionType::Server => self.handle_server(token),
                     ConnectionType::Client => self.handle_client(token, event),
                 };
             }
+            self.running = is_done(self)
         }
     }
 
+
+    pub fn contains(&self, token: Token) -> bool {
+        return self.connections.contains(token)
+    }
+
     fn handle_server(&mut self, token: Token) -> io::Result<()> {
-        loop {
+        while self.running {
             let (sock, addr) = try!(self.connections[token].server_ref().socket.accept());
 
             info!("Accepting connection from {:?}", addr);
@@ -298,7 +322,7 @@ impl Rio {
 
             }
         }
-        Ok(())  // the loop should break with event SIGTERM
+        Ok(())
     }
 
     fn handle_client(&mut self, token: Token, event: Event) -> io::Result<()> {
@@ -317,7 +341,7 @@ impl Rio {
                   &self.connections[token].peer_addr);
 
             {
-                let client = &self.connections[token].client_ref();
+                let client = &mut self.connections[token].client_mut();
                 client.protocol.connection_lost(Reason::ConnectionError);
             }
             self.connections.remove(token);
@@ -329,51 +353,54 @@ impl Rio {
         {
             let mut client = &mut self.connections[token].client_mut();
 
-            debug!("handle client {:?}", client_addr);
+            debug!("handle client {:?} {:?}", token, client_addr);
 
             if kind.is_hup() {
-                debug!("handle hup {:?}", client_addr);
+                debug!("handle hup {:?} {:?}", token, client_addr);
                 client.handle_hup();
                 finished = true;
             } else {
                 if kind.is_readable() {
-                    debug!("handle readable {:?}", client_addr);
+                    debug!("handle readable {:?} {:?}", token, client_addr);
+                    info!("++++++++++++++++++++++++++++++");
                     try!(client.handle_read());
+                    info!("******************************");
                 }
 
                 if kind.is_writable() || client.transport.should_write() {
-                    debug!("handle writable {:?}", client_addr);
+                    debug!("handle writable {:?} {:?}", token, client_addr);
                     client.handle_write();
                 }
             }
 
             if client.is_finished() {
-                debug!("Closing connection with {:?}", client_addr);
+                info!("Closing connection with {:?} {:?}", token, client_addr);
                 match client.peer_addr() {
                     Ok(addr) => info!("Connection closed {:?}", addr),
                     Err(_) => error!("Connection closed (Peer already disconnected)"),
                 }
                 if client.transport.hup() {
-                    info!("Peer hang up {:?}", client_addr);
+                    info!("Peer hang up {:?} {:?}", token, client_addr);
                     client.protocol.connection_lost(Reason::HangUp);
                 } else {
-                    info!("Connection lost {:?}", client_addr);
+                    info!("Connection lost {:?} {:?}", token, client_addr);
                     client.protocol.connection_lost(Reason::ConnectionLost);
                 }
                 try!(self.poll.deregister(&client.socket));
                 finished = true;
             } else {
+                info!("Reregister token {:?} {:?}", token, client_addr);
                 try!(self.poll.reregister(&client.socket, token, client.interest, PollOpt::edge()));
             }
         }
 
 
         if finished {
-            info!("Removing connection {:?}", client_addr);
+            info!("Removing connection {:?} {:?}", token, client_addr);
             self.connections.remove(token);
         }
 
-        debug!("end handle client {:?}", client_addr);
+        debug!("end handle client {:?} {:?}", token, client_addr);
         Ok(())
     }
 }

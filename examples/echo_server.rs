@@ -19,12 +19,12 @@ impl EchoProtocol {
 
 impl Protocol for EchoProtocol {
 
-    fn connection_made(&self, transport: &mut Transport) {
+    fn connection_made(&mut self, transport: &mut Transport) {
         let data = b"Hello from the Echo Server, say bye to quit\n";
         transport.write(data);
     }
 
-    fn data_received(&self, data: &[u8], transport: &mut Transport) {
+    fn data_received(&mut self, data: &[u8], transport: &mut Transport) {
 
         transport.write(data);
         let s_data = str::from_utf8(data).unwrap().trim();
@@ -69,7 +69,7 @@ pub fn main() {
     info!("Start the echo server");
     let server = EchoServerFactory::new();
     let mut rio = Rio::new();
-    rio.listen("0.0.0.0:8888", Box::new(server));
+    let _ = rio.listen("0.0.0.0:8888", Box::new(server));
     info!("Start running the loop");
     rio.run_forever();
 }

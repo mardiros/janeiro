@@ -16,15 +16,15 @@ pub enum Reason {
 pub trait Protocol {
     /// Call everytime a connection is made, use the transport
     /// to write bytes to the connected peer.
-    fn connection_made(&self, transport: &mut Transport) {}
+    fn connection_made(&mut self, transport: &mut Transport) {}
 
     /// Call everytime a peer sent bytes, use the transport,
     /// to write bytes to the connected peer.
-    fn data_received(&self, data: &[u8], transport: &mut Transport) {}
+    fn data_received(&mut self, data: &[u8], transport: &mut Transport) {}
 
     /// Call everytime a connection is closed, before the protocol
     /// instance will be destroyed.
-    fn connection_lost(&self, reason: Reason) {}
+    fn connection_lost(&mut self, reason: Reason) {}
 }
 
 
