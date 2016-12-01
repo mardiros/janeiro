@@ -137,7 +137,6 @@ struct Connection {
 }
 
 
-#[allow(dead_code)]
 impl Connection {
     fn new_server(server: Box<ServerFactory>,
                   peer_addr: SocketAddr,
@@ -161,10 +160,6 @@ impl Connection {
             server: None,
             peer_addr: peer_addr,
         }
-    }
-
-    fn peer_addr(&self) -> SocketAddr {
-        self.peer_addr
     }
 
     fn server_ref(&self) -> &ServerConnection {
