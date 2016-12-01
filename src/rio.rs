@@ -77,9 +77,14 @@ impl ClientConnection {
                 } else {
                     debug!("More data to read");
                 }
+            } else {
+                debug!("Nothing to read");
+                break;
             }
         }
-        self.protocol.data_received(&read_bytes[..], &mut self.transport);
+        if read_bytes.len() > 0 {
+            self.protocol.data_received(&read_bytes[..], &mut self.transport);
+        }
         Ok(())
     }
 
@@ -268,12 +273,12 @@ impl Rio {
 
         info!("Start polling");
 
-        let timeout = Duration::new(1, 0);
+        let timeout = Duration::from_millis(500);
         let mut events = Events::with_capacity(1024);
 
         self.running = true;
         while self.running {
-            debug!("Polling...");
+            // debug!("Polling...");
             self.poll.poll(&mut events, Some(timeout)).unwrap();
 
             for event in events.iter() {
@@ -361,9 +366,7 @@ impl Rio {
             } else {
                 if kind.is_readable() {
                     debug!("handle readable {:?} {:?}", token, client_addr);
-                    info!("++++++++++++++++++++++++++++++");
                     try!(client.handle_read());
-                    info!("******************************");
                 }
 
                 if kind.is_writable() || client.transport.should_write() {
