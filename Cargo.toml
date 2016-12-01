@@ -12,3 +12,6 @@ mio =  "0.6.1"
 slab = "0.3.0"
 nix = "0.7.0"
 net2 = "0.2.26"
+
+[dev-dependencies]
+env_logger = "0.3.5"

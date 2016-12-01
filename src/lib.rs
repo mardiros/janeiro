@@ -12,7 +12,6 @@ extern crate slab;
 
 #[macro_use]
 extern crate log;
-extern crate env_logger;
 
 mod rio;
 mod transport;
