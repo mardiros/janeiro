@@ -19,14 +19,14 @@ impl HttpClientProtocol {
 
 impl Protocol for HttpClientProtocol {
 
-    fn connection_made(&self, transport: &mut Transport) {
+    fn connection_made(&mut self, transport: &mut Transport) {
         debug!("Connection made");
         let data = b"GET /\r\nHost: www.gandi.net\r\nAccept: text/html\r\n\r\n";
         transport.write(data);    
     }
 
     #[allow(unused_variables)]
-    fn data_received(&self, data: &[u8], transport: &mut Transport) {
+    fn data_received(&mut self, data: &[u8], transport: &mut Transport) {
         let s_data = str::from_utf8(data).unwrap().trim();
 
         println!("==========================================================");
@@ -36,7 +36,7 @@ impl Protocol for HttpClientProtocol {
 
     }
 
-    fn connection_lost(&self, reason: Reason) {
+    fn connection_lost(&mut self, reason: Reason) {
         match reason {
             Reason::ConnectionLost => info!("Connection closed by peer"),
             Reason::HangUp => info!("Hang hup"),
@@ -51,7 +51,7 @@ fn main() {
     info!("Start the client");
     let mut rio = Rio::new();
     let protocol = HttpClientProtocol::new();
-    rio.connect("217.70.184.1:80", Box::new(protocol));
+    let _ = rio.connect("217.70.184.1:80", Box::new(protocol));
     info!("Start running the loop");
     rio.run_forever();
 }
